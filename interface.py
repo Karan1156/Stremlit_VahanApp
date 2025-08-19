@@ -587,14 +587,14 @@ def main():
         
         # Case Details Section
         st.divider()
-        st.subheader("🔍 View Case Details")
+        st.subheader("🔍 View Case Details By Car No")
         
         if len(filtered_df) > 0:
             case_options = [
                 f"{row['Car Number']} - {row['Client Name']}" 
                 for _, row in filtered_df.iterrows()
             ]
-            selected_case = st.selectbox("Select a case to view details:", case_options)
+            selected_case = st.selectbox("Enter Vehicle No to view details:", case_options)
             
             # Find the selected case
             selected_index = case_options.index(selected_case)
