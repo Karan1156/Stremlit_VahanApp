@@ -83,13 +83,13 @@ st.markdown("""
 
 # Color palette for consistent visualization colors
 COLOR_PALETTE = {
-    'Total Sale': '#4a6fa5',  
-    'Total Cost': '#166088',  
-    'Total Difference': '#4fc3f7',  
-    'Revenue': '#28a745',   
-    'Expense': '#dc3545',     
-    'Profit': '#17a2b8',      
-    'Case Count': '#6c757d'
+    'Total Sale': '#1976D2',      # Bright blue
+    'Total Cost': '#E53935',      # Vivid red
+    'Total Difference': '#43A047',# Strong green
+    'Revenue': '#FBC02D',         # Deep yellow
+    'Expense': '#8E24AA',         # Purple
+    'Profit': '#00897B',          # Teal
+    'Case Count': '#F57C00'       # Orange
 }
 
 # Function to format Indian rupees
@@ -207,16 +207,25 @@ def main():
             with tab1:
                 # Quarterly Financial Metrics
                 st.subheader("Quarterly Financial Performance")
-                
+                st.markdown("""
+<span style='color: white; font-size: 16px;'>**Description:** This chart shows the total sales, costs, and profits for each quarter. Use it to compare financial performance over time and spot trends in your business.</span>
+""", unsafe_allow_html=True)
+
                 # Vertical bar chart with consistent colors
+                melted_quarterly = quarterly_data.melt(
+                    id_vars='Quarter',
+                    value_vars=['Total Sale', 'Total Cost', 'Total Difference'],
+                    var_name='Metric',
+                    value_name='Amount'
+                )
+                # Add formatted rupees column for display
+                melted_quarterly['AmountLabel'] = melted_quarterly['Amount'].apply(format_rupees_short)
                 fig = px.bar(
-                    quarterly_data.melt(id_vars='Quarter', 
-                                     value_vars=['Total Sale', 'Total Cost', 'Total Difference'],
-                                     var_name='Metric', 
-                                     value_name='Amount'),
+                    melted_quarterly,
                     y='Quarter',
                     x='Amount',
                     color='Metric',
+                    text='AmountLabel',
                     color_discrete_map={
                         'Total Sale': COLOR_PALETTE['Total Sale'],
                         'Total Cost': COLOR_PALETTE['Total Cost'],
@@ -226,12 +235,25 @@ def main():
                     title='Quarterly Sales, Costs, and Profits',
                     labels={'Amount': 'Amount (₹)'},
                     orientation='h',
-                    height=500
+                    height=500,
+                    width=1000
                 )
                 fig.update_layout(
                     yaxis={'categoryorder':'total ascending'},
                     plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)'
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(
+                        tickformat=',.0f',
+                        tickvals=[v for v in range(0, int(melted_quarterly['Amount'].max())+1000000, 1000000)],
+                        ticktext=[f"{int(v/100000)}L" if v >= 100000 else f"{v}" for v in range(0, int(melted_quarterly['Amount'].max())+1000000, 1000000)]
+                    )
+                )
+                fig.update_traces(
+                    textposition='outside',
+                    textfont=dict(size=11, color='white', family='Arial Black'),
+                    marker_line_color='rgba(0,0,0,0.15)',
+                    marker_line_width=1.5,
+                    opacity=0.85
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
@@ -248,33 +270,35 @@ def main():
                         'Total Difference': COLOR_PALETTE['Total Difference']
                     }
                 )
+                # Set y-axis ticks to lakhs
+                max_y = max(
+                    quarterly_data['Total Sale'].max(),
+                    quarterly_data['Total Cost'].max(),
+                    quarterly_data['Total Difference'].max()
+                )
                 fig.update_layout(
                     plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)'
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    yaxis=dict(
+                        tickvals=[v for v in range(0, int(max_y)+1000000, 1000000)],
+                        ticktext=[f"{int(v/100000)}L" if v >= 100000 else f"{v}" for v in range(0, int(max_y)+1000000, 1000000)]
+                    )
+                )
+                # Update hovertemplate to show values in lakhs using valid variables
+                fig.update_traces(
+                    hovertemplate="Quarter: %{x}<br>%{fullData.name}: ₹%{y:,.0f} (<b>%{customdata:.1f}L</b>)<extra></extra>",
+                    customdata=[y/100000 if y is not None else 0 for y in fig.data[0].y]
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Quarterly metrics with colored cards
-                st.subheader("Quarterly Summary")
-                cols = st.columns(len(quarterly_data))
-                for idx, (_, row) in enumerate(quarterly_data.iterrows()):
-                    with cols[idx]:
-                        st.markdown(
-                            f"""
-                            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; 
-                                        border-left: 4px solid {COLOR_PALETTE['Total Sale']}; 
-                                        margin-bottom: 10px;">
-                                <h4 style="color: {COLOR_PALETTE['Total Sale']}; margin-top: 0;">Q{row['Quarter'][-1]} {row['Quarter'][:4]}</h4>
-                                <p style="font-size: 24px; font-weight: bold; margin-bottom: 5px; color: black;">{format_rupees(row['Total Sale'])}</p>
-                                <p style="color: {COLOR_PALETTE['Total Difference']}; margin: 0; color: black;">Profit: {format_rupees(row['Total Difference'])}</p>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
+                    # Removed quarterly summary cards for sales, profit, and cost as requested
             
             with tab2:
                 # Client-wise Analysis
                 st.subheader("Client Performance Analysis")
+                st.markdown("""
+<span style='color: white; font-size: 16px;'>**Description:** The funnel chart below displays the number of cases handled by each client. It helps you quickly identify your most active clients and overall case distribution.</span>
+""", unsafe_allow_html=True)
                 
                 # Client-wise case count
                 client_case_count = filtered_df['Client Name'].value_counts().reset_index()
@@ -283,41 +307,27 @@ def main():
                 # Make client analysis scrollable on small screens
                 st.markdown('<div class="client-scroll">', unsafe_allow_html=True)
                 
-                # Modified bar chart with case counts on bars and increased width
-                fig = px.bar(
-                    client_case_count,
-                    y='Client Name',
+                # Funnel chart for client case volume (with improved colors and only case count labels)
+                funnel_df = client_case_count.sort_values('Case Count', ascending=False)
+                fig = px.funnel(
+                    funnel_df,
                     x='Case Count',
-                    title='Clients by Case Volume',
-                    text='Case Count',  # Display case count on bars
+                    y='Client Name',
+                    title='Clients by Case Volume (Funnel Chart)',
                     color='Client Name',
-                    orientation='h',
-                    height=max(500, len(client_case_count) * 30),
-                    color_discrete_sequence=px.colors.qualitative.Pastel
+                    color_discrete_sequence=px.colors.sequential.Blues
                 )
-                
-                # Update layout for better visualization
+                fig.update_traces(
+                    textinfo='value',  # Show only case count, no percentage
+                    opacity=0.92
+                )
                 fig.update_layout(
-                    yaxis={'categoryorder':'total ascending'},
-                    showlegend=False,
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
-                    uniformtext_minsize=12,  # Minimum font size for text
-                    uniformtext_mode='hide',  # Hide text if it doesn't fit
-                    bargap=0.2,  # Gap between bars
-                    bargroupgap=0.1  # Gap between bar groups
+                    showlegend=False,
+                    margin=dict(l=120, r=60, t=60, b=40),
+                    height=max(500, len(funnel_df) * 30)
                 )
-                
-                # Increase bar width and adjust text position
-                fig.update_traces(
-                    width=0.8,  # Increased bar width (default is 0.8 for categorical data)
-                    textposition='outside',  # Position text outside the bars
-                    texttemplate='%{text}',  # Display the exact case count
-                    marker_line_color='rgb(8,48,107)',
-                    marker_line_width=1.5,
-                    opacity=0.8
-                )
-                
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # Client-wise financial performance
@@ -330,6 +340,9 @@ def main():
                 
                 # Create scatter plot with enhanced data labels
                 st.subheader("Client Financial Performance")
+                st.markdown("""
+<span style='color: white; font-size: 16px;'>**Description:** This scatter plot visualizes each client's total profit against the number of cases, with bubble size representing total sales. Use it to assess which clients are most profitable and active.</span>
+""", unsafe_allow_html=True)
                 
                 fig = px.scatter(
                     client_finance,
@@ -393,6 +406,9 @@ def main():
                 
                 # Enhanced Client Financial Summary Bar Chart
                 st.subheader("Client Financial Summary")
+                st.markdown("""
+<span style='color: white; font-size: 16px;'>**Description:** This horizontal bar chart shows the total sales revenue for each client. It helps you compare client contributions to your overall revenue.</span>
+""", unsafe_allow_html=True)
                 
                 # Sort clients by total sale for better visualization
                 client_finance_sorted = client_finance.sort_values('Total Sale', ascending=True)
@@ -446,71 +462,75 @@ def main():
                 
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Profit vs Cost Comparison Chart
-                st.subheader("Profit vs Cost Analysis")
-                
-                # Create subplot for profit vs cost
-                fig = px.bar(
-                    client_finance_sorted,
-                    y='Client Name',
-                    x=['Total Difference', 'Total Cost'],
-                    title='Client Profitability Analysis',
-                    labels={'value': 'Amount (₹)', 'variable': 'Type'},
-                    color_discrete_map={
-                        'Total Difference': COLOR_PALETTE['Total Difference'],
-                        'Total Cost': COLOR_PALETTE['Total Cost']
-                    },
-                    orientation='h',
-                    barmode='group',
-                    height=max(400, len(client_finance_sorted) * 50)
-                )
-                
-                # Add data labels for both profit and cost
-                for i, row in client_finance_sorted.iterrows():
-                    # Profit label
-                    fig.add_annotation(
-                        x=row['Total Difference'],
-                        y=i + 0.15,  # Slight offset for profit bar
-                        text=f"<b>P: {format_rupees_short(row['Total Difference'])}</b>",
-                        showarrow=False,
-                        xanchor="left" if row['Total Difference'] > 0 else "right",
-                        xshift=10 if row['Total Difference'] > 0 else -10,
-                        font=dict(size=9, color=COLOR_PALETTE['Total Difference'], family="Arial Bold"),
-                        bgcolor="rgba(255,255,255,0.9)",
-                        bordercolor=COLOR_PALETTE['Total Difference'],
-                        borderwidth=1
+                # Profit/Cost Gantt Chart (timeline)
+                st.subheader("Client/Quarterly Profit & Cost Timeline")
+                st.markdown("""
+<span style='color: white; font-size: 16px;'>**Description:** The Gantt chart below visualizes profit and cost timelines for each client or quarter. Use it to track financial events and understand when profits and costs occur.</span>
+""", unsafe_allow_html=True)
+
+                # Option 1: Client-wise profit timeline (if transferDate available)
+                if 'transferDate' in filtered_df.columns:
+                    gantt_df = filtered_df[['Client Name', 'transferDate', 'Total Difference', 'Total Cost']].copy()
+                    gantt_df = gantt_df.dropna(subset=['transferDate'])
+                    gantt_df['End'] = gantt_df['transferDate'] + pd.Timedelta(days=7)  # 1 week window for visualization
+                    gantt_df['ProfitLabel'] = gantt_df['Total Difference'].apply(format_rupees_short)
+                    gantt_df['CostLabel'] = gantt_df['Total Cost'].apply(format_rupees_short)
+                    gantt_df['Task'] = gantt_df['Client Name'] + ' Profit'
+                    gantt_df['Type'] = 'Profit'
+                    cost_gantt = gantt_df.copy()
+                    cost_gantt['Task'] = cost_gantt['Client Name'] + ' Cost'
+                    cost_gantt['Type'] = 'Cost'
+                    cost_gantt['Total Difference'] = cost_gantt['Total Cost']
+                    cost_gantt['ProfitLabel'] = cost_gantt['CostLabel']
+                    gantt_all = pd.concat([gantt_df, cost_gantt], ignore_index=True)
+                    fig = px.timeline(
+                        gantt_all,
+                        x_start='transferDate',
+                        x_end='End',
+                        y='Client Name',
+                        color='Type',
+                        title='Client-wise Profit & Cost Timeline',
+                        labels={'Total Difference': 'Amount (₹)', 'Type': 'Metric'},
+                        hover_data=['ProfitLabel']
                     )
-                    
-                    # Cost label
-                    fig.add_annotation(
-                        x=row['Total Cost'],
-                        y=i - 0.15,  # Slight offset for cost bar
-                        text=f"<b>C: {format_rupees_short(row['Total Cost'])}</b>",
-                        showarrow=False,
-                        xanchor="left",
-                        xshift=10,
-                        font=dict(size=9, color=COLOR_PALETTE['Total Cost'], family="Arial Bold"),
-                        bgcolor="rgba(255,255,255,0.9)",
-                        bordercolor=COLOR_PALETTE['Total Cost'],
-                        borderwidth=1
+                    fig.update_layout(
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        showlegend=True,
+                        height=max(400, len(gantt_all['Client Name'].unique()) * 40),
+                        margin=dict(l=120, r=60, t=60, b=40)
                     )
-                
-                fig.update_layout(
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    xaxis=dict(showgrid=True, gridwidth=1, gridcolor='rgba(0,0,0,0.1)'),
-                    yaxis=dict(showgrid=False),
-                    margin=dict(l=150, r=150, t=80, b=50),
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=1.02,
-                        xanchor="right",
-                        x=1
-                    )
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    # Option 2: Quarterly profit/cost timeline
+                    if 'Quarter' in filtered_df.columns:
+                        quarter_gantt = quarterly_data.melt(
+                            id_vars='Quarter',
+                            value_vars=['Total Difference', 'Total Cost'],
+                            var_name='Type',
+                            value_name='Amount'
+                        )
+                        quarter_gantt['Start'] = pd.PeriodIndex(quarter_gantt['Quarter'], freq='Q').to_timestamp()
+                        quarter_gantt['End'] = quarter_gantt['Start'] + pd.offsets.QuarterEnd()
+                        quarter_gantt['Label'] = quarter_gantt['Amount'].apply(format_rupees_short)
+                        fig = px.timeline(
+                            quarter_gantt,
+                            x_start='Start',
+                            x_end='End',
+                            y='Quarter',
+                            color='Type',
+                            title='Quarterly Profit & Cost Timeline',
+                            labels={'Amount': 'Amount (₹)', 'Type': 'Metric'},
+                            hover_data=['Label']
+                        )
+                        fig.update_layout(
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            showlegend=True,
+                            height=max(400, len(quarter_gantt['Quarter'].unique()) * 40),
+                            margin=dict(l=120, r=60, t=60, b=40)
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
         
         # ======================
         # EXISTING FUNCTIONALITY
