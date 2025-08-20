@@ -284,6 +284,38 @@ def main():
                 yaxis=dict(tickvals=tickvals, ticktext=ticktext)
             )
             st.plotly_chart(fig_received, use_container_width=True)
+            received_df = filtered_df[filtered_df['Amount Status'] == 'Received'].copy()
+            received_df['Month'] = received_df['transferDate'].dt.to_period('M').astype(str)
+            monthly_profit_received = received_df.groupby('Month').agg({'Total Difference': 'sum'}).reset_index()
+            monthly_profit_received['ProfitLabel'] = monthly_profit_received['Total Difference'].apply(format_rupees_short)
+            fig_received = px.bar(
+                monthly_profit_received,
+                x='Month',
+                y='Total Difference',
+                text='ProfitLabel',
+                title='Monthly Profit (Amount Status: Received)',
+                labels={'Total Difference': 'Profit (₹)', 'Month': 'Month'},
+                color='Total Difference',
+                color_continuous_scale='Blues',
+                height=400
+            )
+            fig_received.update_traces(
+                textposition='outside',
+                marker_line_color='rgba(0,0,0,0.15)',
+                marker_line_width=1.5,
+                opacity=0.85
+            )
+            # Set y-axis ticks to lakhs/crores for Indian currency
+            max_profit_received = monthly_profit_received['Total Difference'].max() if not monthly_profit_received.empty else 0
+            tick_step = 500000  # 5 lakh
+            tickvals = [v for v in range(0, int(max_profit_received)+tick_step, tick_step)]
+            ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
+            fig_received.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                yaxis=dict(tickvals=tickvals, ticktext=ticktext)
+            )
+
             
             
             
@@ -292,18 +324,34 @@ def main():
 <span style='color: white; font-size: 16px;'>**Description:** This chart shows the total profit for each month, including all cases regardless of payment status.</span>
 """, unsafe_allow_html=True)
             filtered_df['Month'] = filtered_df['transferDate'].dt.to_period('M').astype(str)
-            monthly_profit = filtered_df.groupby('Month').agg({'Total Difference': 'sum'}).reset_index()
-            monthly_profit['ProfitLabel'] = monthly_profit['Total Difference'].apply(format_rupees_short)
+            monthly_data = filtered_df.groupby('Month').agg({
+                'Total Sale': 'sum',
+                'Total Cost': 'sum',
+                'Total Difference': 'sum'
+            }).reset_index()
+            # Melt for grouped bar chart
+            monthly_melted = monthly_data.melt(
+                id_vars='Month',
+                value_vars=['Total Sale', 'Total Cost', 'Total Difference'],
+                var_name='Metric',
+                value_name='Amount'
+            )
+            monthly_melted['AmountLabel'] = monthly_melted['Amount'].apply(format_rupees_short)
             fig = px.bar(
-                monthly_profit,
+                monthly_melted,
                 x='Month',
-                y='Total Difference',
-                text='ProfitLabel',
-                title='Monthly Profit (All Cases)',
-                labels={'Total Difference': 'Profit (₹)', 'Month': 'Month'},
-                color='Total Difference',
-                color_continuous_scale='Blues',
-                height=400
+                y='Amount',
+                color='Metric',
+                text='AmountLabel',
+                barmode='group',
+                title='Monthly Sales, Cost, and Profit (All Cases)',
+                labels={'Amount': 'Amount (₹)', 'Month': 'Month', 'Metric': 'Metric'},
+                color_discrete_map={
+                    'Total Sale': COLOR_PALETTE['Total Sale'],
+                    'Total Cost': COLOR_PALETTE['Total Cost'],
+                    'Total Difference': COLOR_PALETTE['Total Difference']
+                },
+                height=450
             )
             fig.update_traces(
                 textposition='outside',
@@ -312,9 +360,9 @@ def main():
                 opacity=0.85
             )
             # Set y-axis ticks to lakhs/crores for Indian currency
-            max_profit = monthly_profit['Total Difference'].max() if not monthly_profit.empty else 0
+            max_amount = monthly_melted['Amount'].max() if not monthly_melted.empty else 0
             tick_step = 500000  # 5 lakh
-            tickvals = [v for v in range(0, int(max_profit)+tick_step, tick_step)]
+            tickvals = [v for v in range(0, int(max_amount)+tick_step, tick_step)]
             ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
             fig.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)',
@@ -699,7 +747,7 @@ def main():
         
         # Show statistics with proper rupee formatting and colored cards
         st.subheader("📊 Statistics")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.markdown(
                 f"""
@@ -734,6 +782,19 @@ def main():
                             margin-bottom: 10px;">
                     <h4 style="color: {COLOR_PALETTE['Total Sale']}; margin-top: 0;">Total Sale</h4>
                     <p style="font-size: 24px; font-weight: bold; margin-bottom: 5px; color: black;">{format_rupees(total_sale)}</p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        with col4:
+            total_profit = filtered_df['Total Difference'].sum()
+            st.markdown(
+                f"""
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; 
+                            border-left: 4px solid {COLOR_PALETTE['Total Difference']}; 
+                            margin-bottom: 10px;">
+                    <h4 style="color: {COLOR_PALETTE['Total Difference']}; margin-top: 0;">Total Profit</h4>
+                    <p style="font-size: 24px; font-weight: bold; margin-bottom: 5px; color: black;">{format_rupees(total_profit)}</p>
                 </div>
                 """,
                 unsafe_allow_html=True
