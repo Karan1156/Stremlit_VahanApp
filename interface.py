@@ -154,8 +154,8 @@ def main():
         selected_case_type = st.sidebar.selectbox("Case Type", case_types)
         
         # Status filter
-        statuses = ['All'] + sorted(df['Buyer payment'].unique().tolist())
-        selected_status = st.sidebar.selectbox("Payment Status", statuses)
+        statuses = ['All'] + sorted(df['Amount Status'].unique().tolist())
+        selected_status = st.sidebar.selectbox("Amount Status", statuses)
         
         # Date range filter
         if 'transferDate' in df.columns:
@@ -177,13 +177,19 @@ def main():
         if selected_case_type != 'All':
             filtered_df = filtered_df[filtered_df['Case Type'] == selected_case_type]
         if selected_status != 'All':
-            filtered_df = filtered_df[filtered_df['Buyer payment'] == selected_status]
+            filtered_df = filtered_df[filtered_df['Amount Status'] == selected_status]
         if 'transferDate' in df.columns and len(date_range) == 2:
             filtered_df = filtered_df[
                 (filtered_df['transferDate'] >= pd.to_datetime(date_range[0])) &
                 (filtered_df['transferDate'] <= pd.to_datetime(date_range[1]))
             ]
-        
+        # CSV download button for filtered data (top of dashboard, after filtering)
+        st.download_button(
+            label="Download Filtered Data as CSV",
+            data=filtered_df.to_csv(index=False).encode('utf-8'),
+            file_name="filtered_cases.csv",
+            mime="text/csv"
+        )
         # ==================================
         # QUARTERLY FINANCIAL DASHBOARD
         # ==================================
@@ -201,6 +207,121 @@ def main():
                 'Car Number': 'count'
             }).reset_index().rename(columns={'Car Number': 'Case Count'})
             
+            # =============================
+            # Monthly Profit Bar Chart (All Cases)
+            # =============================
+#             st.subheader("Monthly Profit Overview (All Cases)")
+#             st.markdown("""
+# <span style='color: white; font-size: 16px;'>**Description:** This chart shows the total profit for each month, including all cases regardless of payment status.</span>
+# """, unsafe_allow_html=True)
+            filtered_df['Month'] = filtered_df['transferDate'].dt.to_period('M').astype(str)
+            monthly_profit = filtered_df.groupby('Month').agg({'Total Difference': 'sum'}).reset_index()
+            monthly_profit['ProfitLabel'] = monthly_profit['Total Difference'].apply(format_rupees_short)
+            fig = px.bar(
+                monthly_profit,
+                x='Month',
+                y='Total Difference',
+                text='ProfitLabel',
+                title='Monthly Profit (All Cases)',
+                labels={'Total Difference': 'Profit (₹)', 'Month': 'Month'},
+                color='Total Difference',
+                color_continuous_scale='Blues',
+                height=400
+            )
+            fig.update_traces(
+                textposition='outside',
+                marker_line_color='rgba(0,0,0,0.15)',
+                marker_line_width=1.5,
+                opacity=0.85
+            )
+            # Set y-axis ticks to lakhs/crores for Indian currency
+            max_profit = monthly_profit['Total Difference'].max() if not monthly_profit.empty else 0
+            tick_step = 500000  # 5 lakh
+            tickvals = [v for v in range(0, int(max_profit)+tick_step, tick_step)]
+            ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                yaxis=dict(tickvals=tickvals, ticktext=ticktext)
+            )
+
+            # =============================
+            # Monthly Profit Bar Chart (Amount Status: Received)
+            # =============================
+            st.subheader("Monthly Profit Overview (Amount Status: Received)")
+            st.markdown("""
+<span style='color: white; font-size: 16px;'>**Description:** This chart shows the total profit for each month, considering only cases where Amount Status is 'Received'.</span>
+""", unsafe_allow_html=True)
+            received_df = filtered_df[filtered_df['Amount Status'] == 'Received'].copy()
+            received_df['Month'] = received_df['transferDate'].dt.to_period('M').astype(str)
+            monthly_profit_received = received_df.groupby('Month').agg({'Total Difference': 'sum'}).reset_index()
+            monthly_profit_received['ProfitLabel'] = monthly_profit_received['Total Difference'].apply(format_rupees_short)
+            fig_received = px.bar(
+                monthly_profit_received,
+                x='Month',
+                y='Total Difference',
+                text='ProfitLabel',
+                title='Monthly Profit (Amount Status: Received)',
+                labels={'Total Difference': 'Profit (₹)', 'Month': 'Month'},
+                color='Total Difference',
+                color_continuous_scale='Blues',
+                height=400
+            )
+            fig_received.update_traces(
+                textposition='outside',
+                marker_line_color='rgba(0,0,0,0.15)',
+                marker_line_width=1.5,
+                opacity=0.85
+            )
+            # Set y-axis ticks to lakhs/crores for Indian currency
+            max_profit_received = monthly_profit_received['Total Difference'].max() if not monthly_profit_received.empty else 0
+            tick_step = 500000  # 5 lakh
+            tickvals = [v for v in range(0, int(max_profit_received)+tick_step, tick_step)]
+            ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
+            fig_received.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                yaxis=dict(tickvals=tickvals, ticktext=ticktext)
+            )
+            st.plotly_chart(fig_received, use_container_width=True)
+            
+            
+            
+            st.subheader("Monthly Profit Overview (All Cases)")
+            st.markdown("""
+<span style='color: white; font-size: 16px;'>**Description:** This chart shows the total profit for each month, including all cases regardless of payment status.</span>
+""", unsafe_allow_html=True)
+            filtered_df['Month'] = filtered_df['transferDate'].dt.to_period('M').astype(str)
+            monthly_profit = filtered_df.groupby('Month').agg({'Total Difference': 'sum'}).reset_index()
+            monthly_profit['ProfitLabel'] = monthly_profit['Total Difference'].apply(format_rupees_short)
+            fig = px.bar(
+                monthly_profit,
+                x='Month',
+                y='Total Difference',
+                text='ProfitLabel',
+                title='Monthly Profit (All Cases)',
+                labels={'Total Difference': 'Profit (₹)', 'Month': 'Month'},
+                color='Total Difference',
+                color_continuous_scale='Blues',
+                height=400
+            )
+            fig.update_traces(
+                textposition='outside',
+                marker_line_color='rgba(0,0,0,0.15)',
+                marker_line_width=1.5,
+                opacity=0.85
+            )
+            # Set y-axis ticks to lakhs/crores for Indian currency
+            max_profit = monthly_profit['Total Difference'].max() if not monthly_profit.empty else 0
+            tick_step = 500000  # 5 lakh
+            tickvals = [v for v in range(0, int(max_profit)+tick_step, tick_step)]
+            ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                yaxis=dict(tickvals=tickvals, ticktext=ticktext)
+            )
+            st.plotly_chart(fig, use_container_width=True)
             # Create tabs for different views
             tab1, tab2 = st.tabs(["Financial Metrics", "Client Analysis"])
             
@@ -238,14 +359,18 @@ def main():
                     height=500,
                     width=1000
                 )
+                # Set x-axis ticks to lakhs/crores for Indian currency
+                max_amount = melted_quarterly['Amount'].max()
+                tick_step = 500000  # 5 lakh
+                tickvals = [v for v in range(0, int(max_amount)+tick_step, tick_step)]
+                ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
                 fig.update_layout(
                     yaxis={'categoryorder':'total ascending'},
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     xaxis=dict(
-                        tickformat=',.0f',
-                        tickvals=[v for v in range(0, int(melted_quarterly['Amount'].max())+1000000, 1000000)],
-                        ticktext=[f"{int(v/100000)}L" if v >= 100000 else f"{v}" for v in range(0, int(melted_quarterly['Amount'].max())+1000000, 1000000)]
+                        tickvals=tickvals,
+                        ticktext=ticktext
                     )
                 )
                 fig.update_traces(
@@ -276,12 +401,16 @@ def main():
                     quarterly_data['Total Cost'].max(),
                     quarterly_data['Total Difference'].max()
                 )
+                # Set y-axis ticks to lakhs/crores for Indian currency
+                tick_step = 500000  # 5 lakh
+                tickvals = [v for v in range(0, int(max_y)+tick_step, tick_step)]
+                ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
                 fig.update_layout(
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     yaxis=dict(
-                        tickvals=[v for v in range(0, int(max_y)+1000000, 1000000)],
-                        ticktext=[f"{int(v/100000)}L" if v >= 100000 else f"{v}" for v in range(0, int(max_y)+1000000, 1000000)]
+                        tickvals=tickvals,
+                        ticktext=ticktext
                     )
                 )
                 # Update hovertemplate to show values in lakhs using valid variables
@@ -442,11 +571,16 @@ def main():
                         borderpad=2
                     )
                 
+                # Set x-axis ticks to lakhs/crores for Indian currency
+                max_sale = client_finance_sorted['Total Sale'].max()
+                tick_step = 500000  # 5 lakh
+                tickvals = [v for v in range(0, int(max_sale)+tick_step, tick_step)]
+                ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
                 fig.update_layout(
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     showlegend=False,
-                    xaxis=dict(showgrid=True, gridwidth=1, gridcolor='rgba(0,0,0,0.1)'),
+                    xaxis=dict(showgrid=True, gridwidth=1, gridcolor='rgba(0,0,0,0.1)', tickvals=tickvals, ticktext=ticktext),
                     yaxis=dict(showgrid=False),
                     margin=dict(l=150, r=100, t=80, b=50)
                 )
@@ -465,7 +599,7 @@ def main():
                 # Profit/Cost Gantt Chart (timeline)
                 st.subheader("Client/Quarterly Profit & Cost Timeline")
                 st.markdown("""
-<span style='color: white; font-size: 16px;'>**Description:** The Gantt chart below visualizes profit and cost timelines for each client or quarter. Use it to track financial events and understand when profits and costs occur.</span>
+<span style='color: white; font-size: 16px;'>**Description:** The Gantt chart below visualizes profit and cost timelines of 7days  for each client or quarter. Use it to track financial events and understand when profits and costs occur. If client does not give any case within 7 days then there will show gap else filled color</span>
 """, unsafe_allow_html=True)
 
                 # Option 1: Client-wise profit timeline (if transferDate available)
@@ -734,7 +868,6 @@ def main():
                     st.markdown(f"**Receipt:** {data.get('Receipt', 'N/A')}")
         else:
             st.warning("No cases match your filters")
-        
         # Display raw data (for debugging)
         if st.checkbox("Show raw data for all cases"):
             st.json(data_list)
