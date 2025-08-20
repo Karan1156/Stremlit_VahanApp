@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+import plotly.graph_objects as go
 
 # Set page config with a more professional color scheme
 st.set_page_config(
@@ -161,12 +162,16 @@ def main():
         if 'transferDate' in df.columns:
             min_date = df['transferDate'].min()
             max_date = df['transferDate'].max()
-            date_range = st.sidebar.date_input(
-                "Transfer Date Range",
-                [min_date, max_date],
-                min_value=min_date,
-                max_value=max_date
-            )
+            if pd.notna(min_date) and pd.notna(max_date):
+                date_range = st.sidebar.date_input(
+                    "Transfer Date Range",
+                    [min_date, max_date],
+                    min_value=min_date,
+                    max_value=max_date
+                )
+            else:
+                date_range = [datetime.today().replace(day=1), datetime.today()]
+                st.sidebar.info("Using current month as default date range")
         
         # Apply filters
         filtered_df = df.copy()
@@ -183,6 +188,7 @@ def main():
                 (filtered_df['transferDate'] >= pd.to_datetime(date_range[0])) &
                 (filtered_df['transferDate'] <= pd.to_datetime(date_range[1]))
             ]
+        
         # CSV download button for filtered data (top of dashboard, after filtering)
         st.download_button(
             label="Download Filtered Data as CSV",
@@ -190,6 +196,7 @@ def main():
             file_name="filtered_cases.csv",
             mime="text/csv"
         )
+        
         # ==================================
         # QUARTERLY FINANCIAL DASHBOARD
         # ==================================
@@ -207,128 +214,62 @@ def main():
                 'Car Number': 'count'
             }).reset_index().rename(columns={'Car Number': 'Case Count'})
             
+            # Gauge chart for received payments percentage
+            if 'Amount Status' in filtered_df.columns:
+                total_cases = len(filtered_df)
+                received_cases = len(filtered_df[filtered_df['Amount Status'] == 'Received'])
+                received_pct = (received_cases / total_cases) * 100 if total_cases > 0 else 0
+
+                # Create gauge chart
+                fig_gauge = go.Figure(go.Indicator(
+                    mode="gauge+number+delta",
+                    value=received_pct,
+                    delta={'reference': 100, 'increasing': {'color': "green"}},
+                    gauge={
+                        'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkgray"},
+                        'bar': {'color': "green"},
+                        'bgcolor': "white",
+                        'steps': [
+                            {'range': [0, 50], 'color': '#ffcccc'},
+                            {'range': [50, 80], 'color': '#fff3cd'},
+                            {'range': [80, 100], 'color': '#d4edda'}
+                        ],
+                        'threshold': {
+                            'line': {'color': "red", 'width': 4},
+                            'thickness': 0.75,
+                            'value': received_pct
+                        }
+                    },
+                    number={'suffix': "%"},
+                    title={'text': "Received Payments %", 'font': {'size': 20}}
+                ))
+
+                fig_gauge.update_layout(
+                    height=350,
+                    margin=dict(l=40, r=40, t=60, b=40),
+                    paper_bgcolor="white",
+                    font={'color': "black", 'family': "Arial"}
+                )
+
+                st.plotly_chart(fig_gauge, use_container_width=True)
+            else:
+                st.warning("Amount Status column not found in data")
+            
             # =============================
             # Monthly Profit Bar Chart (All Cases)
             # =============================
-#             st.subheader("Monthly Profit Overview (All Cases)")
-#             st.markdown("""
-# <span style='color: white; font-size: 16px;'>**Description:** This chart shows the total profit for each month, including all cases regardless of payment status.</span>
-# """, unsafe_allow_html=True)
-            filtered_df['Month'] = filtered_df['transferDate'].dt.to_period('M').astype(str)
-            monthly_profit = filtered_df.groupby('Month').agg({'Total Difference': 'sum'}).reset_index()
-            monthly_profit['ProfitLabel'] = monthly_profit['Total Difference'].apply(format_rupees_short)
-            fig = px.bar(
-                monthly_profit,
-                x='Month',
-                y='Total Difference',
-                text='ProfitLabel',
-                title='Monthly Profit (All Cases)',
-                labels={'Total Difference': 'Profit (₹)', 'Month': 'Month'},
-                color='Total Difference',
-                color_continuous_scale='Blues',
-                height=400
-            )
-            fig.update_traces(
-                textposition='outside',
-                marker_line_color='rgba(0,0,0,0.15)',
-                marker_line_width=1.5,
-                opacity=0.85
-            )
-            # Set y-axis ticks to lakhs/crores for Indian currency
-            max_profit = monthly_profit['Total Difference'].max() if not monthly_profit.empty else 0
-            tick_step = 500000  # 5 lakh
-            tickvals = [v for v in range(0, int(max_profit)+tick_step, tick_step)]
-            ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
-            fig.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                yaxis=dict(tickvals=tickvals, ticktext=ticktext)
-            )
-
-            # =============================
-            # Monthly Profit Bar Chart (Amount Status: Received)
-            # =============================
-            st.subheader("Monthly Profit Overview (Amount Status: Received)")
-            st.markdown("""
-<span style='color: white; font-size: 16px;'>**Description:** This chart shows the total profit for each month, considering only cases where Amount Status is 'Received'.</span>
-""", unsafe_allow_html=True)
-            received_df = filtered_df[filtered_df['Amount Status'] == 'Received'].copy()
-            received_df['Month'] = received_df['transferDate'].dt.to_period('M').astype(str)
-            monthly_profit_received = received_df.groupby('Month').agg({'Total Difference': 'sum'}).reset_index()
-            monthly_profit_received['ProfitLabel'] = monthly_profit_received['Total Difference'].apply(format_rupees_short)
-            fig_received = px.bar(
-                monthly_profit_received,
-                x='Month',
-                y='Total Difference',
-                text='ProfitLabel',
-                title='Monthly Profit (Amount Status: Received)',
-                labels={'Total Difference': 'Profit (₹)', 'Month': 'Month'},
-                color='Total Difference',
-                color_continuous_scale='Blues',
-                height=400
-            )
-            fig_received.update_traces(
-                textposition='outside',
-                marker_line_color='rgba(0,0,0,0.15)',
-                marker_line_width=1.5,
-                opacity=0.85
-            )
-            # Set y-axis ticks to lakhs/crores for Indian currency
-            max_profit_received = monthly_profit_received['Total Difference'].max() if not monthly_profit_received.empty else 0
-            tick_step = 500000  # 5 lakh
-            tickvals = [v for v in range(0, int(max_profit_received)+tick_step, tick_step)]
-            ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
-            fig_received.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                yaxis=dict(tickvals=tickvals, ticktext=ticktext)
-            )
-            st.plotly_chart(fig_received, use_container_width=True)
-            received_df = filtered_df[filtered_df['Amount Status'] == 'Received'].copy()
-            received_df['Month'] = received_df['transferDate'].dt.to_period('M').astype(str)
-            monthly_profit_received = received_df.groupby('Month').agg({'Total Difference': 'sum'}).reset_index()
-            monthly_profit_received['ProfitLabel'] = monthly_profit_received['Total Difference'].apply(format_rupees_short)
-            fig_received = px.bar(
-                monthly_profit_received,
-                x='Month',
-                y='Total Difference',
-                text='ProfitLabel',
-                title='Monthly Profit (Amount Status: Received)',
-                labels={'Total Difference': 'Profit (₹)', 'Month': 'Month'},
-                color='Total Difference',
-                color_continuous_scale='Blues',
-                height=400
-            )
-            fig_received.update_traces(
-                textposition='outside',
-                marker_line_color='rgba(0,0,0,0.15)',
-                marker_line_width=1.5,
-                opacity=0.85
-            )
-            # Set y-axis ticks to lakhs/crores for Indian currency
-            max_profit_received = monthly_profit_received['Total Difference'].max() if not monthly_profit_received.empty else 0
-            tick_step = 500000  # 5 lakh
-            tickvals = [v for v in range(0, int(max_profit_received)+tick_step, tick_step)]
-            ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
-            fig_received.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                yaxis=dict(tickvals=tickvals, ticktext=ticktext)
-            )
-
-            
-            
-            
             st.subheader("Monthly Profit Overview (All Cases)")
             st.markdown("""
 <span style='color: white; font-size: 16px;'>**Description:** This chart shows the total profit for each month, including all cases regardless of payment status.</span>
 """, unsafe_allow_html=True)
+            
             filtered_df['Month'] = filtered_df['transferDate'].dt.to_period('M').astype(str)
             monthly_data = filtered_df.groupby('Month').agg({
                 'Total Sale': 'sum',
                 'Total Cost': 'sum',
                 'Total Difference': 'sum'
             }).reset_index()
+            
             # Melt for grouped bar chart
             monthly_melted = monthly_data.melt(
                 id_vars='Month',
@@ -337,6 +278,7 @@ def main():
                 value_name='Amount'
             )
             monthly_melted['AmountLabel'] = monthly_melted['Amount'].apply(format_rupees_short)
+            
             fig = px.bar(
                 monthly_melted,
                 x='Month',
@@ -359,6 +301,7 @@ def main():
                 marker_line_width=1.5,
                 opacity=0.85
             )
+            
             # Set y-axis ticks to lakhs/crores for Indian currency
             max_amount = monthly_melted['Amount'].max() if not monthly_melted.empty else 0
             tick_step = 500000  # 5 lakh
@@ -370,6 +313,53 @@ def main():
                 yaxis=dict(tickvals=tickvals, ticktext=ticktext)
             )
             st.plotly_chart(fig, use_container_width=True)
+            
+            # =============================
+            # Monthly Profit Bar Chart (Amount Status: Received)
+            # =============================
+            st.subheader("Monthly Profit Overview (Amount Status: Received)")
+            st.markdown("""
+<span style='color: white; font-size: 16px;'>**Description:** This chart shows the total profit for each month, considering only cases where Amount Status is 'Received'.</span>
+""", unsafe_allow_html=True)
+            
+            received_df = filtered_df[filtered_df['Amount Status'] == 'Received'].copy()
+            if not received_df.empty:
+                received_df['Month'] = received_df['transferDate'].dt.to_period('M').astype(str)
+                monthly_profit_received = received_df.groupby('Month').agg({'Total Difference': 'sum'}).reset_index()
+                monthly_profit_received['ProfitLabel'] = monthly_profit_received['Total Difference'].apply(format_rupees_short)
+                
+                fig_received = px.bar(
+                    monthly_profit_received,
+                    x='Month',
+                    y='Total Difference',
+                    text='ProfitLabel',
+                    title='Monthly Profit (Amount Status: Received)',
+                    labels={'Total Difference': 'Profit (₹)', 'Month': 'Month'},
+                    color='Total Difference',
+                    color_continuous_scale='Blues',
+                    height=400
+                )
+                fig_received.update_traces(
+                    textposition='outside',
+                    marker_line_color='rgba(0,0,0,0.15)',
+                    marker_line_width=1.5,
+                    opacity=0.85
+                )
+                
+                # Set y-axis ticks to lakhs/crores for Indian currency
+                max_profit_received = monthly_profit_received['Total Difference'].max() if not monthly_profit_received.empty else 0
+                tick_step = 500000  # 5 lakh
+                tickvals = [v for v in range(0, int(max_profit_received)+tick_step, tick_step)]
+                ticktext = [f"{int(v/100000)}L" if v < 10000000 else f"{v//10000000}Cr" for v in tickvals]
+                fig_received.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    yaxis=dict(tickvals=tickvals, ticktext=ticktext)
+                )
+                st.plotly_chart(fig_received, use_container_width=True)
+            else:
+                st.info("No cases with 'Received' status in the filtered data")
+            
             # Create tabs for different views
             tab1, tab2 = st.tabs(["Financial Metrics", "Client Analysis"])
             
@@ -404,8 +394,7 @@ def main():
                     title='Quarterly Sales, Costs, and Profits',
                     labels={'Amount': 'Amount (₹)'},
                     orientation='h',
-                    height=500,
-                    width=1000
+                    height=500
                 )
                 # Set x-axis ticks to lakhs/crores for Indian currency
                 max_amount = melted_quarterly['Amount'].max()
@@ -468,8 +457,6 @@ def main():
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
-                    # Removed quarterly summary cards for sales, profit, and cost as requested
-            
             with tab2:
                 # Client-wise Analysis
                 st.subheader("Client Performance Analysis")
@@ -929,6 +916,7 @@ def main():
                     st.markdown(f"**Receipt:** {data.get('Receipt', 'N/A')}")
         else:
             st.warning("No cases match your filters")
+        
         # Display raw data (for debugging)
         if st.checkbox("Show raw data for all cases"):
             st.json(data_list)
