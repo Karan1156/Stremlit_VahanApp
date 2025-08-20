@@ -730,8 +730,8 @@ def main():
         # Create a simplified dataframe for the overview
         overview_df = display_df[[
             'Car Number', 'Client Name', 'Case Type', 'Task Type', 
-            'transferDate', 'Total Cost', 'Total Sale', 'Buyer payment','Amount Status'
-        ]].rename(columns={'Amount': 'Status'})
+            'transferDate', 'Total Cost', 'Total Sale', 'Buyer payment'
+        ]].rename(columns={'Buyer payment': 'Status'})
         
         # Apply conditional formatting to the dataframe
         def color_status(val):
